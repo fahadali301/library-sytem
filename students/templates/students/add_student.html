@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Add Student</h1>
+<p class="muted">Fill details and add face photo. You can capture live photo from camera.</p>
+
+{% if form.non_field_errors %}
+    <div class="panel" style="border-color:#fecaca; background:#fff1f2;">
+        {% for error in form.non_field_errors %}
+            <p style="margin:4px 0; color:#b91c1c;">{{ error }}</p>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" class="panel" id="student-form">
+    {% csrf_token %}
+
+    <p>
+        <label for="{{ form.name.id_for_label }}"><strong>Name</strong></label><br>
+        {{ form.name }}
+        {% for error in form.name.errors %}
+            <br><span style="color:#b91c1c;">{{ error }}</span>
+        {% endfor %}
+    </p>
+
+    <p>
+        <label for="{{ form.roll_number.id_for_label }}"><strong>Roll Number</strong></label><br>
+        {{ form.roll_number }}
+        {% for error in form.roll_number.errors %}
+            <br><span style="color:#b91c1c;">{{ error }}</span>
+        {% endfor %}
+    </p>
+
+    <div class="panel" style="margin:8px 0 14px;">
+        <p><strong>Live Camera Capture</strong></p>
+        <video id="camera-preview" width="320" height="240" autoplay playsinline style="border:1px solid #e5e7eb; border-radius:8px;"></video>
+        <canvas id="camera-canvas" width="320" height="240" style="display:none;"></canvas>
+        <img id="captured-preview" alt="Captured" style="display:none; margin-top:10px; max-width:320px; border:1px solid #e5e7eb; border-radius:8px;">
+        <div class="quick-actions" style="margin-top:10px;">
+            <button class="btn" type="button" id="start-camera">Start Camera</button>
+            <button class="btn btn-secondary" type="button" id="capture-photo">Capture Photo</button>
+        </div>
+        <p id="camera-status" class="muted" style="margin-top:8px;">Manual upload is available below if camera is not allowed.</p>
+    </div>
+
+    <p>
+        <label for="{{ form.face_image.id_for_label }}"><strong>Face Image</strong></label><br>
+        {{ form.face_image }}
+        {% for error in form.face_image.errors %}
+            <br><span style="color:#b91c1c;">{{ error }}</span>
+        {% endfor %}
+    </p>
+
+    <div class="quick-actions">
+        <button class="btn" type="submit">Save Student</button>
+        <a class="btn btn-secondary" href="/">Cancel</a>
+    </div>
+</form>
+
+<script>
+(function () {
+    const video = document.getElementById('camera-preview');
+    const canvas = document.getElementById('camera-canvas');
+    const preview = document.getElementById('captured-preview');
+    const startButton = document.getElementById('start-camera');
+    const captureButton = document.getElementById('capture-photo');
+    const statusEl = document.getElementById('camera-status');
+    const fileInput = document.getElementById('{{ form.face_image.id_for_label }}');
+    let stream = null;
+
+    async function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            statusEl.textContent = 'Camera not supported. Please use file upload.';
+            return;
+        }
+
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            statusEl.textContent = 'Camera started. Click Capture Photo.';
+        } catch (error) {
+            statusEl.textContent = 'Camera access denied. Please use file upload.';
+        }
+    }
+
+    function capturePhoto() {
+        if (!stream) {
+            statusEl.textContent = 'Start camera first.';
+            return;
+        }
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function (blob) {
+            if (!blob) {
+                statusEl.textContent = 'Could not capture photo.';
+                return;
+            }
+
+            const file = new File([blob], 'captured_face.jpg', { type: 'image/jpeg' });
+            if (window.DataTransfer && fileInput) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                fileInput.files = dt.files;
+                preview.src = URL.createObjectURL(blob);
+                preview.style.display = 'block';
+                statusEl.textContent = 'Photo captured and attached to Face Image field.';
+            } else {
+                statusEl.textContent = 'Browser does not support auto-attach. Please upload manually.';
+            }
+        }, 'image/jpeg', 0.9);
+    }
+
+    startButton.addEventListener('click', startCamera);
+    captureButton.addEventListener('click', capturePhoto);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Face Lookup</h1>
+<p class="muted">Use camera capture for instant detection. File upload is kept as fallback.</p>
+
+<h2>Camera Detect</h2>
+<video id="camera" width="360" height="270" autoplay playsinline style="border:1px solid #e5e7eb; border-radius:8px;"></video>
+<canvas id="snapshot" width="360" height="270" style="display:none;"></canvas>
+<p>
+    <button id="start-camera" class="btn" type="button">Start Camera</button>
+    <button id="capture-detect" class="btn" type="button">Capture and Detect</button>
+</p>
+<p id="camera-status" class="muted"></p>
+<div id="camera-result"></div>
+
+<hr>
+<h2>Fallback: Upload Image</h2>
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <p><input type="file" name="image" accept="image/*"></p>
+    <button class="btn" type="submit">Detect from Upload</button>
+</form>
+
+{% if error %}
+    <p style="color:#b91c1c;"><strong>Error:</strong> {{ error }}</p>
+{% endif %}
+
+{% if result %}
+    <h2>Server Result</h2>
+    <p><strong>Message:</strong> {{ result.message }}</p>
+    <p><strong>Confidence:</strong> {{ result.confidence }}</p>
+    {% if result.student %}
+        <p><strong>Student:</strong> <a href="/students/{{ result.student.id }}/">{{ result.student.name }}</a> ({{ result.student.roll_number }})</p>
+        <p><strong>Active Books:</strong> {{ result.active_count }}</p>
+
+        <table>
+            <thead>
+            <tr>
+                <th>Book</th>
+                <th>ISBN</th>
+                <th>Issued At</th>
+                <th>Due Date</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for record in result.active_records %}
+                <tr>
+                    <td>{{ record.book.title }}</td>
+                    <td>{{ record.book.isbn }}</td>
+                    <td>{{ record.issued_at }}</td>
+                    <td>{{ record.due_date|default:'-' }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="4" class="muted">No active books for this student.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+{% endif %}
+
+<script>
+(function () {
+    const video = document.getElementById('camera');
+    const canvas = document.getElementById('snapshot');
+    const startButton = document.getElementById('start-camera');
+    const captureButton = document.getElementById('capture-detect');
+    const statusEl = document.getElementById('camera-status');
+    const resultEl = document.getElementById('camera-result');
+    let stream = null;
+
+    function getCookie(name) {
+        const cookies = document.cookie ? document.cookie.split(';') : [];
+        for (const raw of cookies) {
+            const cookie = raw.trim();
+            if (cookie.startsWith(name + '=')) {
+                return decodeURIComponent(cookie.substring(name.length + 1));
+            }
+        }
+        return null;
+    }
+
+    function renderResult(data) {
+        if (data.error) {
+            resultEl.innerHTML = '<p style="color:#b91c1c;"><strong>Error:</strong> ' + data.error + '</p>';
+            return;
+        }
+
+        let html = '<h3>Camera Result</h3>';
+        html += '<p><strong>Message:</strong> ' + (data.message || '-') + '</p>';
+        html += '<p><strong>Faces:</strong> ' + (data.faces_detected ?? '-') + '</p>';
+        html += '<p><strong>Confidence:</strong> ' + (data.confidence ?? '-') + '</p>';
+
+        if (data.student) {
+            html += '<p><strong>Student:</strong> ' + data.student.name + ' (' + data.student.roll_number + ')</p>';
+            html += '<p><strong>Active Books:</strong> ' + data.student.books_issued + '</p>';
+            const books = data.student.active_books || [];
+            if (books.length > 0) {
+                html += '<table><thead><tr><th>Book</th><th>ISBN</th><th>Issued</th><th>Due</th></tr></thead><tbody>';
+                for (const book of books) {
+                    html += '<tr><td>' + book.title + '</td><td>' + book.isbn + '</td><td>' + (book.issued_at || '-') + '</td><td>' + (book.due_date || '-') + '</td></tr>';
+                }
+                html += '</tbody></table>';
+            }
+        }
+
+        resultEl.innerHTML = html;
+    }
+
+    async function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            statusEl.textContent = 'Camera is not supported in this browser.';
+            return;
+        }
+
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({video: true});
+            video.srcObject = stream;
+            statusEl.textContent = 'Camera started. Click "Capture and Detect".';
+        } catch (error) {
+            statusEl.textContent = 'Unable to access camera: ' + error.message;
+        }
+    }
+
+    async function captureAndDetect() {
+        if (!stream) {
+            statusEl.textContent = 'Start camera first.';
+            return;
+        }
+
+        const context = canvas.getContext('2d');
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+        if (!blob) {
+            statusEl.textContent = 'Could not capture frame.';
+            return;
+        }
+
+        const data = new FormData();
+        data.append('image', blob, 'camera_capture.jpg');
+
+        statusEl.textContent = 'Detecting...';
+        const csrfToken = getCookie('csrftoken');
+        try {
+            const response = await fetch('/api/face-book-lookup/', {
+                method: 'POST',
+                headers: csrfToken ? {'X-CSRFToken': csrfToken} : {},
+                body: data,
+                credentials: 'same-origin',
+            });
+            const payload = await response.json();
+            renderResult(payload);
+            statusEl.textContent = response.ok ? 'Detection completed.' : 'Detection failed.';
+        } catch (error) {
+            statusEl.textContent = 'Request failed: ' + error.message;
+        }
+    }
+
+    startButton.addEventListener('click', startCamera);
+    captureButton.addEventListener('click', captureAndDetect);
+})();
+</script>
+{% endblock %}

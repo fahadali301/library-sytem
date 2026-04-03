@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Issue Book</h1>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="btn" type="submit">Issue</button>
+</form>
+<p class="muted">If a book is unavailable, it will not appear in this list.</p>
+{% endblock %}
+

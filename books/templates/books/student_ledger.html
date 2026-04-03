@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Student Ledger</h1>
+<p><strong>Name:</strong> {{ student.name }}</p>
+<p><strong>Roll Number:</strong> {{ student.roll_number }}</p>
+<p><strong>Active Books:</strong> {{ active_count }}</p>
+
+<h2>Currently Issued</h2>
+<table>
+    <thead>
+    <tr>
+        <th>Book</th>
+        <th>ISBN</th>
+        <th>Issued At</th>
+        <th>Due Date</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for record in active_records %}
+        <tr>
+            <td>{{ record.book.title }}</td>
+            <td>{{ record.book.isbn }}</td>
+            <td>{{ record.issued_at }}</td>
+            <td>{{ record.due_date|default:'-' }}</td>
+        </tr>
+    {% empty %}
+        <tr><td colspan="4" class="muted">No active books issued.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<h2>Returned History</h2>
+<table>
+    <thead>
+    <tr>
+        <th>Book</th>
+        <th>Issued At</th>
+        <th>Returned At</th>
+    </tr>
+    </thead>
+    <tbody>
+    {% for record in returned_records %}
+        <tr>
+            <td>{{ record.book.title }}</td>
+            <td>{{ record.issued_at }}</td>
+            <td>{{ record.returned_at }}</td>
+        </tr>
+    {% empty %}
+        <tr><td colspan="3" class="muted">No returned records yet.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
+
